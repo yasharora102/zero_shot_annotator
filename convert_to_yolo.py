@@ -20,6 +20,7 @@ def load_annotations():
 def convert_to_yolo():
     """Converts the annotations to YOLO segmentation format."""
     annotations_data = load_annotations()
+    
 
     yolo_labels_dir = Path(YOLO_OUTPUT_DIR) / "labels"
     yolo_images_dir = Path(YOLO_OUTPUT_DIR) / "images"

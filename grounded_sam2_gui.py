@@ -68,7 +68,7 @@ import threading
 
 from grounded_sam2_tool import annotate_image
 from convert_to_yolo import convert_to_yolo # MODIFIED: Import the new conversion function
-
+from convert_to_coco import convert_to_coco
 class GroundedSAM2GUI:
     def __init__(self, root):
         self.root = root
@@ -82,6 +82,7 @@ class GroundedSAM2GUI:
 
         tk.Button(root, text="Select Images", command=self.select_images).pack(pady=5)
         tk.Button(root, text="Run Annotation", command=self.run_annotation).pack(pady=5)
+        tk.Button(root, text="Convert to COCO for CVAT", command=self.convert_to_coco_format).pack(pady=5)
         # MODIFIED: Changed the button text and command
         tk.Button(root, text="Convert to YOLO for CVAT", command=self.convert_to_yolo_format).pack(pady=5)
 
@@ -108,6 +109,15 @@ class GroundedSAM2GUI:
         threading.Thread(target=process).start()
 
     # MODIFIED: Renamed function and updated status messages
+    def convert_to_coco_format(self):
+        self.status.config(text="Converting to COCO format...")
+
+        def process():
+            convert_to_coco()  # Call the new conversion function
+            self.status.config(text="✅ CVAT COCO file saved.")
+        
+        threading.Thread(target=process).start()
+        
     def convert_to_yolo_format(self):
         self.status.config(text="Converting to YOLO format...")
 
