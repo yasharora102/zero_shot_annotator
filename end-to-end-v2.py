@@ -50,9 +50,21 @@ from transformers import AutoProcessor, AutoModelForZeroShotObjectDetection
 
 def mask_to_polygons(mask: np.ndarray):
     """
-    Convert a binary mask (H×W bool) to a list of flattened polygons [x1,y1,x2,y2,...].
+    Convert a binary mask (H×W bool/float) to a list of flattened polygons [x1,y1,x2,y2,...].
     """
-    mask_uint8 = (mask.astype(np.uint8) * 255)
+    # Ensure mask is 2D
+    if mask is None or mask.size == 0:
+        return []
+    if mask.ndim == 3:
+        mask = mask.squeeze()
+    if mask.ndim != 2:
+        print(f"  [WARN] mask shape after squeeze: {mask.shape} (should be 2D)")
+        return []
+    mask = np.ascontiguousarray(mask)
+    # Binarize for OpenCV
+    mask_uint8 = (mask > 0.5).astype(np.uint8) * 255
+    if np.count_nonzero(mask_uint8) == 0:
+        return []
     contours, _ = cv2.findContours(mask_uint8, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     polys = []
     for cnt in contours:
@@ -175,13 +187,16 @@ if __name__ == "__main__":
     )
     p.add_argument("--input-dir", required=True, help="Root folder of input images")
     p.add_argument("--output-dir", required=True, help="Folder to write dataset (contains data.yaml, train.txt, data/)")
-    p.add_argument("--prompt", default="food", help="Text prompt for grounded detection")
-    p.add_argument("--sam-checkpoint", required=True, help="Path to SAM2 .pt checkpoint")
-    p.add_argument("--sam-config", required=True, help="Path to SAM2 YAML config")
-    p.add_argument("--grounding-model", default="IDEA-Research/grounding-dino-tiny",
+    p.add_argument("--prompt", default="food.", help="Text prompt for grounded detection")
+    p.add_argument("--sam-checkpoint", default="checkpoints/sam2.1_hiera_large.pt")
+    p.add_argument("--sam-config", default="configs/sam2.1/sam2.1_hiera_l.yaml")
+    p.add_argument("--grounding-model", default="IDEA-Research/grounding-dino-base",
                    help="HuggingFace grounding DINO model name or path")
     p.add_argument("--box-threshold", type=float, default=0.3, help="Detection box threshold")
     p.add_argument("--text-threshold", type=float, default=0.3, help="Detection text threshold")
     p.add_argument("--device", default="cuda", help="Torch device: cuda or cpu")
     args = p.parse_args()
     main(args)
+# "
+# SAM2_MODEL_CONFIG = 
+# GROUNDING_MODEL = "IDEA-Research/grounding-dino-tiny"
