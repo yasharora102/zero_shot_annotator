@@ -1,76 +1,88 @@
 import os
 import json
-from pathlib import Path
+from tqdm import tqdm
 
-OUTPUT_DIR = "output_annotations"
-COCO_OUTPUT_PATH = os.path.join(OUTPUT_DIR, "cvat_dataset.json")
-
-def load_annotations():
-    data = []
-    for root, dirs, files in os.walk(OUTPUT_DIR):
-        for f in files:
-            if f.endswith(".json") and f != "cvat_dataset.json":
-                with open(os.path.join(root, f), "r") as infile:
-                    data.append(json.load(infile))
-    return data
-
-def convert_to_coco():
-    annotations_data = load_annotations()
-
+def convert_to_coco(input_dir, output_json):
     images = []
     annotations = []
-    categories = {}
-    category_id_map = {}
-    ann_id = 1
-    cat_id = 1
+    label_set = set()
 
-    for img_id, entry in enumerate(annotations_data, 1):
-        image_id = img_id
+    ann_id = 1
+    # 1) Gather images + raw labels
+    for img_idx, fname in enumerate(sorted(os.listdir(input_dir))):
+        if not fname.lower().endswith((".jpg", ".png")): 
+            continue
+
+        img_id = img_idx + 1
+        # you’ll want to load the true width/height here:
+        # e.g. via PIL.Image.open(os.path.join(input_dir,fname)).size
+        width, height = 1024, 768  
+
         images.append({
-            "id": image_id,
-            "file_name": entry["file_name"],
-            "width": entry["width"],
-            "height": entry["height"]
+            "id": img_id,
+            "file_name": fname,
+            "width": width,
+            "height": height,
         })
 
-        for ann in entry["annotations"]:
-            cat_name = ann["category_name"]
-            if cat_name not in categories:
-                categories[cat_name] = {
-                    "id": cat_id,
-                    "name": cat_name,
-                    "supercategory": "none"
-                }
-                category_id_map[cat_name] = cat_id
-                cat_id += 1
+        # assume per-image JSON with polygons in “shapes”
+        ann_path = os.path.join(input_dir, fname.rsplit(".",1)[0] + ".json")
+        with open(ann_path) as f:
+            raw = json.load(f)
+
+        for shape in raw["shapes"]:
+            label = shape["label"]
+            label_set.add(label)
+
+            # flatten segmentation for COCO
+            seg = [coord for point in shape["points"] for coord in point]
+
+            # compute bbox & area
+            xs = [p[0] for p in shape["points"]]
+            ys = [p[1] for p in shape["points"]]
+            xmin, xmax = min(xs), max(xs)
+            ymin, ymax = min(ys), max(ys)
+            w, h = xmax - xmin, ymax - ymin
+            area = w * h
 
             annotations.append({
                 "id": ann_id,
-                "image_id": image_id,
-                "category_id": category_id_map[cat_name],
-                "bbox": ann["bbox"],
-                "segmentation": ann["segmentation"],
-                "area": ann["segmentation"].get("size", 0),
-                "iscrowd": 0
+                "image_id": img_id,
+                # placeholder, fix below once you know all labels → IDs
+                "category_id": label,
+                "segmentation": [seg],
+                "bbox": [xmin, ymin, w, h],
+                "area": area,
+                "iscrowd": 0,
             })
             ann_id += 1
 
-    coco_format = {
-        "info": {
-            "description": "GroundedSAM2 CVAT Dataset",
-            "version": "1.0",
-            "year": 2025
-        },
-        "licenses": [],
+    # 2) Build categories list
+    classes = sorted(label_set)
+    categories = [
+        {"id": idx+1, "name": name, "supercategory": ""}
+        for idx, name in enumerate(classes)
+    ]
+    name2id = {c["name"]: c["id"] for c in categories}
+
+    # 3) Swap out the placeholder label → numeric category_id
+    for ann in annotations:
+        ann["category_id"] = name2id[ann["category_id"]]
+
+    # 4) Dump full COCO JSON
+    coco = {
         "images": images,
         "annotations": annotations,
-        "categories": list(categories.values())
+        "categories": categories,
     }
-
-    with open(COCO_OUTPUT_PATH, "w") as f:
-        json.dump(coco_format, f, indent=4)
-
-    print(f"✅ COCO dataset written to {COCO_OUTPUT_PATH}")
+    with open(output_json, "w") as f:
+        json.dump(coco, f, indent=2)
 
 if __name__ == "__main__":
-    convert_to_coco()
+    import argparse
+    p = argparse.ArgumentParser()
+    p.add_argument("--input-dir",  required=True, help="folder with .jpg/.json pairs")
+    p.add_argument("--output",     required=True, help="where to write coco.json")
+    args = p.parse_args()
+
+    convert_to_coco(args.input_dir, args.output)
