@@ -1,0 +1,4 @@
+images/train/outs/images/20250414_131228.jpg
+images/train/outs/images/20250414_131231.jpg
+images/train/outs/images/20250414_131233.jpg
+images/train/outs/images/20250414_131237.jpg

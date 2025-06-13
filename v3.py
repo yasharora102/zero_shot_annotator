@@ -40,12 +40,43 @@ from sam2.sam2_image_predictor import SAM2ImagePredictor
 from transformers import AutoProcessor, AutoModelForZeroShotObjectDetection
 
 
+# def mask_to_polygons(mask: np.ndarray):
+#     """
+#     Convert a binary mask (H×W bool) to list of flattened polygons [x1,y1,x2,y2,...].
+#     """
+#     m = (mask.astype(np.uint8) * 255)
+#     contours, _ = cv2.findContours(m, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+#     polys = []
+#     for cnt in contours:
+#         pts = cnt.squeeze()
+#         if pts.ndim != 2 or len(pts) < 3:
+#             continue
+#         flat = []
+#         for x, y in pts:
+#             flat.extend([int(x), int(y)])
+#         polys.append(flat)
+#     return polys
+
+
+
 def mask_to_polygons(mask: np.ndarray):
     """
-    Convert a binary mask (H×W bool) to list of flattened polygons [x1,y1,x2,y2,...].
+    Convert a binary mask (H×W bool/float) to a list of flattened polygons [x1,y1,x2,y2,...].
     """
-    m = (mask.astype(np.uint8) * 255)
-    contours, _ = cv2.findContours(m, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    # Ensure mask is 2D
+    if mask is None or mask.size == 0:
+        return []
+    if mask.ndim == 3:
+        mask = mask.squeeze()
+    if mask.ndim != 2:
+        print(f"  [WARN] mask shape after squeeze: {mask.shape} (should be 2D)")
+        return []
+    mask = np.ascontiguousarray(mask)
+    # Binarize for OpenCV
+    mask_uint8 = (mask > 0.5).astype(np.uint8) * 255
+    if np.count_nonzero(mask_uint8) == 0:
+        return []
+    contours, _ = cv2.findContours(mask_uint8, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     polys = []
     for cnt in contours:
         pts = cnt.squeeze()
@@ -154,13 +185,11 @@ if __name__ == "__main__":
     )
     parser.add_argument("--input-dir", required=True, help="Folder of input .jpg images")
     parser.add_argument("--output-dir", required=True, help="Root output folder for dataset")
-    parser.add_argument("--prompt", default="food", help="Grounding DINO text prompt")
-    parser.add_argument("--sam-checkpoint", required=True, help="Path to SAM2 checkpoint .pt")
-    parser.add_argument("--sam-config", required=True, help="Path to SAM2 config .yaml")
-    parser.add_argument(
-        "--grounding-model", default="IDEA-Research/grounding-dino-tiny",
-        help="HuggingFace grounding-dino model"
-    )
+    parser.add_argument("--prompt", default="food.", help="Grounding DINO text prompt")
+    parser.add_argument("--sam-checkpoint", default="checkpoints/sam2.1_hiera_large.pt")
+    parser.add_argument("--sam-config", default="configs/sam2.1/sam2.1_hiera_l.yaml")
+    parser.add_argument("--grounding-model", default="IDEA-Research/grounding-dino-base",
+                   help="HuggingFace grounding DINO model name or path")
     parser.add_argument("--box-threshold", type=float, default=0.3, help="Box score threshold")
     parser.add_argument("--text-threshold", type=float, default=0.3, help="Text score threshold")
     parser.add_argument("--device", default="cuda", help="Torch device: cuda or cpu")

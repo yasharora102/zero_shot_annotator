@@ -1,0 +1,4 @@
+names:
+  0: food
+path: .
+train: train.txt
